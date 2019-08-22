@@ -20,7 +20,9 @@ public class ZoomWorker extends SwingWorker<Void, Integer> {
     private DataModel dm;
     private int total;
 
-    private ArrayList<File> imageList = new ArrayList<>();
+    private ArrayList<File> imagesList = new ArrayList<>();
+
+    private FolderBrowser browser = new FolderBrowser();
 
     public ZoomWorker(GUI parent) {
         this.parent = parent;
@@ -35,9 +37,9 @@ public class ZoomWorker extends SwingWorker<Void, Integer> {
 
             parent.getProgress().setString("Counting files...");
 
-            recursivelyBrowseFiles(dm.getWorkingDir());
+            browser.recursivelyBrowseFiles(dm.getWorkingDir(), imagesList);
 
-            total = imageList.size();
+            total = imagesList.size();
 
             doZoom();
 
@@ -59,24 +61,12 @@ public class ZoomWorker extends SwingWorker<Void, Integer> {
     protected void done() {
         parent.getProgress().setValue(100);
         parent.getProgress().setString("Finished");
-    }
 
-    /*
-        Browse files in the folder, including sub-directories
-        Build a files map
-     */
-
-    private void recursivelyBrowseFiles(File cur) {
-        if (cur.isFile()) {
-            imageList.add(cur);
-        } else {
-            File[] listFile = cur.listFiles();
-            if (listFile == null)
-                return;
-            for (File f : listFile) {
-                recursivelyBrowseFiles(f);
-            }
+        if (JOptionPane.showConfirmDialog(parent, "Do you want to update new photos sizes to the excel file?", "WARNING",
+                JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+            new ExcelWorker(parent).execute();
         }
+
     }
 
     /*
@@ -85,7 +75,7 @@ public class ZoomWorker extends SwingWorker<Void, Integer> {
 
     private void doZoom() {
         int current = 0;
-        for (File fileImage : imageList) {
+        for (File fileImage : imagesList) {
             zoomAndExport(fileImage, dm.getLimWidth(), dm.getLimHeight());
             current++;
             publish(current);
@@ -100,7 +90,6 @@ public class ZoomWorker extends SwingWorker<Void, Integer> {
     private void zoomAndExport(File input, int limWidth, int limHeight) {
         try {
             Mat src = Imgcodecs.imread(input.getPath());
-            Mat dst = new Mat();
 
             int ratio = calculateSuitableRatio(src.width(), src.height(), limWidth, limHeight, 100, dm.getRatio());
 
@@ -124,6 +113,7 @@ public class ZoomWorker extends SwingWorker<Void, Integer> {
 
                 File destination = new File(dm.getResultDir().getPath() + File.separatorChar + input.getName());
 
+                Mat dst = new Mat();
                 Imgproc.resize(src, dst, new Size(src.width() * ratio / 100.0, src.height() * ratio / 100.0), 0, 0, Imgproc.INTER_CUBIC);
 
                 System.out.println(src.width() + "x" + src.height() + " (" + ratio + " %) => " + dst.width() + "x" + dst.height());
@@ -131,9 +121,10 @@ public class ZoomWorker extends SwingWorker<Void, Integer> {
 
                 input.delete();
 
+                dst.release();
+
             }
             src.release();
-            dst.release();
         } catch (IOException ex) {
             ex.printStackTrace();
         }
